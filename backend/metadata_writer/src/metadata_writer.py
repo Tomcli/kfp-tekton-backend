@@ -127,11 +127,12 @@ def get_component_template(obj):
                 "artifacts": [
                     {
                         "name": i["name"],
+                        "path": i["path"],
                         "s3": {
                             "bucket": "mlpipeline",
                             "key": "artifacts/%s/%s/%s.tgz" % (obj.metadata.labels[TEKTON_PIPELINERUN_LABEL_KEY],
-                                                               i['parent_task'],
-                                                               i["name"].replace(i['parent_task'] + '-', ''))
+                                                               obj.metadata.labels[TEKTON_TASKRUN_LABEL_KEY],
+                                                               i["name"])
                         }
                     } for i in results
                 ]
@@ -149,9 +150,6 @@ def get_output_template(obj):
     if PIPELINE_RUNTIME == "tekton":
         artifacts = json.loads(obj.metadata.annotations[TEKTON_OUTPUT_ARTIFACT_ANNOTATION_KEY])
         results = artifacts.get(obj.metadata.labels[TEKTON_PIPELINETASK_LABEL_KEY], [])
-        artifact_prefix = obj.metadata.labels[TEKTON_PIPELINETASK_LABEL_KEY] + '-'
-        s3_key_prefix = 'artifacts/%s/%s' % (obj.metadata.labels[TEKTON_PIPELINERUN_LABEL_KEY],
-                                             obj.metadata.labels[TEKTON_PIPELINETASK_LABEL_KEY])
         output_template = {
             "name": obj.metadata.labels[TEKTON_PIPELINETASK_LABEL_KEY],
             "artifacts": [
@@ -160,8 +158,9 @@ def get_output_template(obj):
                     "path": i["path"],
                     "s3": {
                         "bucket": "mlpipeline",
-                        "key": "%s/%s.tgz" % (s3_key_prefix,
-                                              i["name"].replace(artifact_prefix, ''))
+                        "key": "artifacts/%s/%s/%s.tgz" % (obj.metadata.labels[TEKTON_PIPELINERUN_LABEL_KEY],
+                                                           obj.metadata.labels[TEKTON_TASKRUN_LABEL_KEY],
+                                                           i["name"])
                     }
                 } for i in results
             ]
@@ -255,18 +254,13 @@ while True:
                     if not artifact_uri:
                         continue
 
-                    if PIPELINE_RUNTIME == "tekton":
-                        input_name = input_artifact.get('name', '')
-                        input_prefix = template_name + '-'
-                        input_name = input_name[len(input_prefix):]
-                    else:
-                        input_name = input_artifact.get('path', '') # Every artifact should have a path in Argo
-                        input_artifact_path_prefix = '/tmp/inputs/'
-                        input_artifact_path_postfix = '/data'
-                        if input_name.startswith(input_artifact_path_prefix):
-                            input_name = input_name[len(input_artifact_path_prefix):]
-                        if input_name.endswith(input_artifact_path_postfix):
-                            input_name = input_name[0: -len(input_artifact_path_postfix)]
+                    input_name = input_artifact.get('path', '') # Every artifact should have a path in Argo
+                    input_artifact_path_prefix = '/tmp/inputs/'
+                    input_artifact_path_postfix = '/data'
+                    if input_name.startswith(input_artifact_path_prefix):
+                        input_name = input_name[len(input_artifact_path_prefix):]
+                    if input_name.endswith(input_artifact_path_postfix):
+                        input_name = input_name[0: -len(input_artifact_path_postfix)]
 
                     artifact = link_execution_to_input_artifact(
                         store=mlmd_store,
